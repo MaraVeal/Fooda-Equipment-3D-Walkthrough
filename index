@@ -1,0 +1,1951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Fooda Service Area — 3D Scene</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --color-orange:   #F3634A;
+    --color-orange-dark: #d94f39;
+    --color-charcoal: #374053;
+    --color-green:    #18CC9B;
+    --text-primary:   #374053;
+    --text-secondary: #737A87;
+    --text-muted:     #AFB3BA;
+    --bg-card:        #fff;
+    --bg-soft:        #F5F5F6;
+    --border:         #e4e6ea;
+    --divider:        #eef0f3;
+    /* legacy alias used elsewhere in the scene JS */
+    --red: #F3634A;
+    --panel: rgba(55, 64, 83, 0.88);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #d7d2c8; font-family: "Quicksand", "Segoe UI", Arial, sans-serif; }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+
+  /* crosshair */
+  #crosshair {
+    position: fixed; left: 50%; top: 50%; width: 7px; height: 7px;
+    margin: -3.5px 0 0 -3.5px; border-radius: 50%;
+    background: rgba(255,255,255,0.5); box-shadow: 0 0 0 1.5px rgba(0,0,0,0.25);
+    pointer-events: none; mix-blend-mode: difference; z-index: 5;
+  }
+
+  /* info panel */
+  #label {
+    position: fixed; right: 18px; top: 70px; width: 280px;
+    max-height: calc(100vh - 100px); overflow-y: auto;
+    background: #fff; border-radius: 16px; z-index: 10;
+    opacity: 0; transform: translateX(16px); transition: .28s ease; pointer-events: none;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.28); overflow: hidden;
+  }
+  #label.show { opacity: 1; transform: none; pointer-events: auto; }
+  .eq-close {
+    position: absolute; top: 10px; right: 10px; width: 24px; height: 24px;
+    border-radius: 50%; border: none; background: rgba(255,255,255,0.14);
+    color: #fff; font-size: 15px; cursor: pointer; font-family: inherit;
+    display: flex; align-items: center; justify-content: center; z-index: 2;
+    transition: background .15s;
+  }
+  .eq-close:hover { background: var(--color-orange); }
+  #label-hint { font-size: 10px; font-weight: 600; color: var(--text-muted); padding: 7px 16px; text-align: center; text-transform: uppercase; letter-spacing: .8px; border-top: 1px solid var(--divider); }
+
+  /* top bar */
+  #topbar {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 8px; align-items: center; z-index: 10;
+  }
+  .pill {
+    background: var(--color-charcoal); color: #eef0f3; backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 999px;
+    padding: 8px 16px; font-size: 12.5px; font-weight: 600; letter-spacing: .2px;
+    display: flex; align-items: center; gap: 8px; font-family: inherit;
+  }
+  .pill b { color: #fff; }
+  #reset-view {
+    cursor: pointer; transition: .15s; background: var(--color-orange);
+    border-color: var(--color-orange); color: #fff;
+  }
+  #reset-view:hover { background: var(--color-orange-dark); border-color: var(--color-orange-dark); }
+
+  /* side panel — pick equipment to inspect */
+  #sidepanel {
+    position: fixed; top: 70px; left: 18px; z-index: 11;
+    width: 210px; max-height: calc(100vh - 96px); overflow-y: auto;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden;
+    box-shadow: 0 4px 24px rgba(55,64,83,0.18);
+  }
+  .panel-head {
+    font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    color: #fff; background: var(--color-charcoal); padding: 10px 14px;
+  }
+  #panel-list { display: flex; flex-direction: column; padding: 6px; }
+  .panel-item {
+    text-align: left; border: none; cursor: pointer; color: var(--text-primary);
+    background: transparent; border-radius: 8px; padding: 9px 10px;
+    font-size: 13px; font-weight: 600; font-family: inherit; line-height: 1.25;
+    transition: background .12s, color .12s;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .panel-item em { font-style: normal; font-size: 11px; color: var(--text-muted); white-space: nowrap; font-weight: 500; }
+  .panel-item:hover { background: var(--bg-soft); color: var(--color-orange); }
+  .panel-item.active { background: var(--color-orange); color: #fff; }
+  .panel-item.active em { color: rgba(255,255,255,0.75); }
+
+  /* on-screen navigation pad */
+  #navpad {
+    position: fixed; bottom: 26px; right: 26px; z-index: 12;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+  #navpad .navrow { display: flex; gap: 8px; }
+  .navbtn {
+    width: 52px; height: 52px; border-radius: 12px;
+    background: var(--color-charcoal); color: #fff; border: 1px solid rgba(255,255,255,0.1);
+    font-size: 18px; line-height: 1; font-family: inherit;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    box-shadow: 0 4px 16px rgba(55,64,83,0.35); transition: background .12s, transform .08s;
+  }
+  .navbtn:hover { background: #2e3749; }
+  .navbtn.active, .navbtn:active { background: var(--color-orange); transform: scale(0.94); }
+
+  /* toast */
+  #toast {
+    position: fixed; top: 70px; left: 50%; transform: translate(-50%, -8px);
+    background: var(--color-charcoal); color: #fff; font-weight: 700; font-size: 13px;
+    padding: 9px 18px; border-radius: 999px; z-index: 20; opacity: 0;
+    transition: .25s ease; pointer-events: none;
+    box-shadow: 0 6px 20px rgba(55,64,83,0.35); font-family: inherit;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+
+  /* menu modal */
+  .menu-hero { background: linear-gradient(120deg,#7a3b1f,#b5662f); color: #fff; padding: 26px 28px; }
+  .menu-hero span { font-size: 12px; letter-spacing: 2px; opacity: .85; }
+  .menu-logo { font-family: Georgia, serif; font-weight: 700; font-size: 30px; margin-top: 6px; }
+  .menu-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; padding: 24px 28px 30px; }
+  .menu h4 { color: var(--red); font-size: 14px; letter-spacing: .6px; margin: 18px 0 8px; border-bottom: 1.5px solid #eedfdb; padding-bottom: 6px; }
+  .menu h4:first-child { margin-top: 0; }
+  .menu ul { list-style: none; margin: 0; padding: 0; }
+  .menu li { display: flex; justify-content: space-between; gap: 14px; font-size: 14px; padding: 5px 0; color: #2a2a2a; }
+  .menu li b { color: #6a6a6a; font-weight: 600; white-space: nowrap; }
+
+  /* equipment popup card — vertical layout */
+  .eq-card { font-family: "Quicksand", "Segoe UI", Arial, sans-serif; color: var(--text-primary); }
+  .eq-hero { background: var(--color-charcoal); color: #fff; padding: 14px 16px 12px; position: relative; }
+  .eq-hero-tag { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-bottom: 5px; }
+  .eq-hero-title { font-size: 16px; font-weight: 700; line-height: 1.3; padding-right: 30px; display: flex; align-items: flex-start; gap: 8px; }
+  .eq-hero-title::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--color-orange); box-shadow: 0 0 6px var(--color-orange); flex-shrink: 0; margin-top: 5px; }
+  .eq-body { padding: 13px 15px 16px; display: flex; flex-direction: column; gap: 11px; }
+  .eq-desc { font-size: 12.5px; line-height: 1.55; color: var(--text-secondary); margin: 0; font-weight: 500; }
+  .eq-specs { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; }
+  .eq-specs-head { font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 7px; }
+  .eq-specs ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+  .eq-specs li { font-size: 12px; font-weight: 600; color: var(--text-primary); display: flex; gap: 7px; align-items: flex-start; }
+  .eq-specs li::before { content: "→"; color: var(--color-orange); font-weight: 700; flex-shrink: 0; }
+  .eq-link { display: inline-flex; align-items: center; gap: 5px; background: var(--color-orange); color: #fff; text-decoration: none; padding: 7px 13px; border-radius: 8px; font-size: 12px; font-weight: 700; font-family: inherit; transition: .15s; align-self: flex-start; }
+  .eq-link:hover { background: var(--color-orange-dark); }
+  .eq-link::after { content: "↗"; font-size: 11px; }
+  .eq-model { font-size: 11px; font-weight: 500; color: var(--text-muted); margin: 0; }
+  .eq-required { background: #FFFBE6; border: 1.5px solid #FBDB56; border-radius: 8px; padding: 8px 11px; font-size: 11.5px; font-weight: 700; color: #7a5800; line-height: 1.4; }
+
+  /* loading */
+  #loading { display: none; }
+
+  @media (max-width: 640px) {
+    #label { left: 12px; right: 12px; top: auto; bottom: 12px; width: auto; }
+    .pos-grid { grid-template-columns: 1fr 1fr; }
+    .menu-cols { grid-template-columns: 1fr; gap: 0; }
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="topbar">
+    <div class="pill">Pick an item, then drag to inspect it</div>
+    <div class="pill" id="reset-view">⟲ Overview</div>
+  </div>
+
+  <aside id="sidepanel">
+    <div class="panel-head">Equipment</div>
+    <div id="panel-list"></div>
+  </aside>
+
+  <div id="label">
+    <div id="label-body"></div>
+    <div id="label-hint">Drag to inspect · Overview to go back</div>
+  </div>
+
+  <div id="toast"></div>
+
+  <div id="loading">
+    <div class="load-logo">f o o d a</div>
+    <div class="load-bar"><i></i></div>
+  </div>
+
+  <script type="module">
+import * as THREE from 'three';
+// ===== textures.js =====
+const { woodTexture, concreteTexture, concreteRoughness, foodaLogo, orderDisplay, menuBoard, posScreen, emergencySign, cardReaderFace, avantcoLogo, vantcoPanel, cautionDecal, cayenneLabel, exteriorTexture, cayenneDecal, wisePadFace, posScreenWide } = (() => {
+
+// ---- helpers ----------------------------------------------------------
+function makeCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  return c;
+}
+function finish(canvas, { repeat = null, aniso = 8, srgb = true } = {}) {
+  const t = new THREE.CanvasTexture(canvas);
+  t.anisotropy = aniso;
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  if (repeat) {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(repeat[0], repeat[1]);
+  }
+  t.needsUpdate = true;
+  return t;
+}
+function rand(a, b) { return a + Math.random() * (b - a); }
+
+// ---- butcher-block wood ----------------------------------------------
+function woodTexture() {
+  const c = makeCanvas(1024, 512);
+  const x = c.getContext('2d');
+  // base (light maple butcher block)
+  x.fillStyle = '#d8b576';
+  x.fillRect(0, 0, c.width, c.height);
+  // glued strips running along length
+  const strips = 11;
+  const sw = c.width / strips;
+  const tones = ['#e0bd80', '#d2ab6c', '#e6c68c', '#cca362', '#dbb478', '#ecd09a'];
+  for (let i = 0; i < strips; i++) {
+    x.fillStyle = tones[i % tones.length];
+    x.fillRect(i * sw, 0, sw, c.height);
+    // grain lines within each strip
+    for (let g = 0; g < 22; g++) {
+      x.strokeStyle = `rgba(120,84,40,${rand(0.03, 0.10)})`;
+      x.lineWidth = rand(0.6, 1.8);
+      x.beginPath();
+      const gx = i * sw + rand(2, sw - 2);
+      x.moveTo(gx, 0);
+      for (let y = 0; y <= c.height; y += 16) {
+        x.lineTo(gx + Math.sin(y * 0.05 + i) * rand(1, 4), y);
+      }
+      x.stroke();
+    }
+    // seam shadow between strips
+    x.fillStyle = 'rgba(110,76,34,0.22)';
+    x.fillRect(i * sw - 1, 0, 2, c.height);
+  }
+  // subtle end-grain knots
+  for (let k = 0; k < 6; k++) {
+    const kx = rand(0, c.width), ky = rand(0, c.height);
+    const r = rand(4, 10);
+    const g = x.createRadialGradient(kx, ky, 1, kx, ky, r);
+    g.addColorStop(0, 'rgba(70,44,16,0.5)');
+    g.addColorStop(1, 'rgba(70,44,16,0)');
+    x.fillStyle = g;
+    x.beginPath(); x.arc(kx, ky, r, 0, 7); x.fill();
+  }
+  // soft top sheen
+  const sg = x.createLinearGradient(0, 0, 0, c.height);
+  sg.addColorStop(0, 'rgba(255,240,210,0.12)');
+  sg.addColorStop(0.5, 'rgba(255,255,255,0)');
+  sg.addColorStop(1, 'rgba(40,24,8,0.12)');
+  x.fillStyle = sg; x.fillRect(0, 0, c.width, c.height);
+  return finish(c);
+}
+
+// ---- polished concrete ------------------------------------------------
+function concreteTexture() {
+  const c = makeCanvas(1024, 1024);
+  const x = c.getContext('2d');
+  x.fillStyle = '#5b5550';
+  x.fillRect(0, 0, c.width, c.height);
+  // mottled blotches
+  for (let i = 0; i < 1400; i++) {
+    const r = rand(2, 40);
+    const px = rand(0, c.width), py = rand(0, c.height);
+    const tone = rand(-26, 26);
+    const base = 90 + tone;
+    x.fillStyle = `rgba(${base},${base - 4},${base - 8},${rand(0.02, 0.10)})`;
+    x.beginPath(); x.arc(px, py, r, 0, 7); x.fill();
+  }
+  // large polish streaks
+  for (let i = 0; i < 40; i++) {
+    x.strokeStyle = `rgba(180,178,172,${rand(0.015, 0.05)})`;
+    x.lineWidth = rand(20, 90);
+    x.beginPath();
+    const y = rand(0, c.height);
+    x.moveTo(-50, y); x.lineTo(c.width + 50, y + rand(-60, 60));
+    x.stroke();
+  }
+  // score-line grid (large floor tiles)
+  x.strokeStyle = 'rgba(30,28,26,0.55)';
+  x.lineWidth = 2.5;
+  for (let g = 0; g <= 4; g++) {
+    const p = (g / 4) * c.width;
+    x.beginPath(); x.moveTo(p, 0); x.lineTo(p, c.height); x.stroke();
+    x.beginPath(); x.moveTo(0, p); x.lineTo(c.width, p); x.stroke();
+  }
+  return finish(c, { repeat: [3, 3] });
+}
+
+// roughness map for concrete so reflections vary
+function concreteRoughness() {
+  const c = makeCanvas(512, 512);
+  const x = c.getContext('2d');
+  x.fillStyle = '#3a3a3a'; // fairly glossy
+  x.fillRect(0, 0, c.width, c.height);
+  for (let i = 0; i < 3000; i++) {
+    const v = rand(20, 150);
+    x.fillStyle = `rgba(${v},${v},${v},0.05)`;
+    x.beginPath(); x.arc(rand(0, c.width), rand(0, c.height), rand(1, 14), 0, 7); x.fill();
+  }
+  const t = finish(c, { repeat: [3, 3], srgb: false });
+  return t;
+}
+
+// ---- fooda wordmark (red rounded squares, white letters) -------------
+function foodaLogo({ scale = 1 } = {}) {
+  const letters = ['f', 'o', 'o', 'd', 'a'];
+  const n = letters.length;
+  const box = 150 * scale;
+  const gap = 14 * scale;
+  const pad = 26 * scale;
+  const w = Math.round(n * box + (n - 1) * gap + pad * 2);
+  const h = Math.round(box + pad * 2);
+  const c = makeCanvas(w, h);
+  const x = c.getContext('2d');
+  x.clearRect(0, 0, w, h);
+  function rr(px, py, s, r) {
+    x.beginPath();
+    x.moveTo(px + r, py);
+    x.arcTo(px + s, py, px + s, py + s, r);
+    x.arcTo(px + s, py + s, px, py + s, r);
+    x.arcTo(px, py + s, px, py, r);
+    x.arcTo(px, py, px + s, py, r);
+    x.closePath();
+  }
+  for (let i = 0; i < n; i++) {
+    const px = pad + i * (box + gap);
+    const py = pad;
+    // white outline plate
+    x.fillStyle = '#ffffff';
+    rr(px - 6 * scale, py - 6 * scale, box + 12 * scale, 26 * scale); x.fill();
+    // red tile
+    x.fillStyle = '#d6402a';
+    rr(px, py, box, 22 * scale); x.fill();
+    // letter
+    x.fillStyle = '#ffffff';
+    x.font = `700 ${box * 0.74}px Georgia, "Times New Roman", serif`;
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillText(letters[i], px + box / 2, py + box / 2 + box * 0.02);
+  }
+  return finish(c);
+}
+
+// ---- digital order display "213" -------------------------------------
+function orderDisplay(num = '213') {
+  const c = makeCanvas(512, 320);
+  const x = c.getContext('2d');
+  x.fillStyle = '#0a0a0a';
+  x.fillRect(0, 0, c.width, c.height);
+  // inner bezel
+  x.strokeStyle = '#1c1c1c'; x.lineWidth = 14;
+  x.strokeRect(7, 7, c.width - 14, c.height - 14);
+  // glow digits
+  x.shadowColor = '#ff2a14';
+  x.shadowBlur = 36;
+  x.fillStyle = '#ff3b22';
+  x.font = '700 210px "Courier New", monospace';
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  x.fillText(num, c.width / 2, c.height / 2 + 6);
+  return finish(c);
+}
+
+// ---- TV menu board ----------------------------------------------------
+function menuBoard() {
+  const c = makeCanvas(820, 1280);
+  const x = c.getContext('2d');
+  x.fillStyle = '#ffffff';
+  x.fillRect(0, 0, c.width, c.height);
+  // hero food image placeholder (warm abstract)
+  const hg = x.createLinearGradient(0, 0, c.width, 360);
+  hg.addColorStop(0, '#7a3b1f'); hg.addColorStop(0.5, '#b5662f'); hg.addColorStop(1, '#8a4a22');
+  x.fillStyle = hg; x.fillRect(0, 0, c.width, 360);
+  // suggestive plate
+  x.fillStyle = 'rgba(255,255,255,0.10)';
+  x.beginPath(); x.ellipse(c.width / 2, 200, 250, 120, 0, 0, 7); x.fill();
+  x.fillStyle = 'rgba(0,0,0,0.18)';
+  x.font = '600 22px Helvetica, Arial, sans-serif';
+  x.textAlign = 'center';
+  x.fillText("TODAY'S FEATURE", c.width / 2, 50);
+  // red brand bar
+  x.fillStyle = '#d6402a';
+  x.fillRect(0, 360, c.width, 70);
+  x.fillStyle = '#fff';
+  x.font = '700 40px Georgia, serif';
+  x.fillText('f o o d a', c.width / 2, 398);
+
+  let y = 480;
+  const section = (title) => {
+    x.fillStyle = '#d6402a';
+    x.font = '700 30px Helvetica, Arial, sans-serif';
+    x.textAlign = 'left';
+    x.fillText(title, 50, y);
+    x.strokeStyle = '#e7c9c2'; x.lineWidth = 2;
+    x.beginPath(); x.moveTo(50, y + 14); x.lineTo(c.width - 50, y + 14); x.stroke();
+    y += 54;
+  };
+  const item = (name, price) => {
+    x.fillStyle = '#2a2a2a';
+    x.font = '500 24px Helvetica, Arial, sans-serif';
+    x.textAlign = 'left';
+    x.fillText(name, 50, y);
+    x.textAlign = 'right';
+    x.fillStyle = '#6a6a6a';
+    x.fillText(price, c.width - 50, y);
+    y += 42;
+  };
+  section('ENTRÉES');
+  item('Grilled Herb Chicken & Rice', '$10.50');
+  item('Korean BBQ Beef Bowl', '$11.75');
+  item('Roasted Veg Pasta Primavera', '$9.95');
+  y += 18; section('SALAD & COMBINATION');
+  item('Harvest Grain Bowl', '$9.25');
+  item('Caesar + Half Sandwich', '$8.95');
+  y += 18; section('SIDES & DESSERT');
+  item('Garlic Roasted Potatoes', '$3.50');
+  item('Seasonal Fruit Cup', '$3.25');
+  item('Fudge Brownie', '$2.75');
+  y += 18; section('BEVERAGES');
+  item('Bottled Water / Soda', '$1.95');
+  item('Cold Brew Coffee', '$3.50');
+  return finish(c);
+}
+
+// ---- iPad POS screen --------------------------------------------------
+function posScreen() {
+  const c = makeCanvas(900, 1200);
+  const x = c.getContext('2d');
+  x.fillStyle = '#15171c'; x.fillRect(0, 0, c.width, c.height);
+  // header
+  x.fillStyle = '#d6402a'; x.fillRect(0, 0, c.width, 120);
+  x.fillStyle = '#fff';
+  x.font = '700 52px Georgia, serif'; x.textAlign = 'left';
+  x.fillText('fooda', 40, 78);
+  x.font = '500 26px Helvetica, Arial, sans-serif'; x.textAlign = 'right';
+  x.fillText('Order #214', c.width - 40, 74);
+  // tiles
+  const items = [
+    ['Herb Chicken', '$10.50', '#3a4a3f'],
+    ['BBQ Beef Bowl', '$11.75', '#4a3a3a'],
+    ['Veg Pasta', '$9.95', '#3f3a4a'],
+    ['Grain Bowl', '$9.25', '#4a463a'],
+    ['Caesar Combo', '$8.95', '#3a464a'],
+    ['Fruit Cup', '$3.25', '#3f4a3a'],
+  ];
+  const cols = 2, tw = (c.width - 120) / cols, th = 200, gx = 40, gy = 160;
+  items.forEach((it, i) => {
+    const cx = gx + (i % cols) * (tw + 40);
+    const cy = gy + Math.floor(i / cols) * (th + 30);
+    x.fillStyle = it[2];
+    x.beginPath(); x.roundRect(cx, cy, tw, th, 18); x.fill();
+    x.fillStyle = '#fff';
+    x.font = '600 34px Helvetica, Arial, sans-serif'; x.textAlign = 'left';
+    x.fillText(it[0], cx + 26, cy + th - 60);
+    x.fillStyle = '#ffd9cf';
+    x.font = '700 30px Helvetica, Arial, sans-serif';
+    x.fillText(it[1], cx + 26, cy + th - 22);
+  });
+  // total bar
+  x.fillStyle = '#23262d'; x.fillRect(0, c.height - 150, c.width, 150);
+  x.fillStyle = '#9aa0aa'; x.font = '500 30px Helvetica, Arial, sans-serif'; x.textAlign = 'left';
+  x.fillText('Subtotal', 40, c.height - 90);
+  x.fillStyle = '#fff'; x.textAlign = 'right';
+  x.font = '700 40px Helvetica, Arial, sans-serif';
+  x.fillText('$22.25', c.width - 40, c.height - 85);
+  x.fillStyle = '#2ecc71';
+  x.beginPath(); x.roundRect(40, c.height - 70, c.width - 80, 0.1, 8); x.fill();
+  return finish(c);
+}
+
+// ---- emergency-exit sign ---------------------------------------------
+function emergencySign() {
+  const c = makeCanvas(420, 300);
+  const x = c.getContext('2d');
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, c.width, c.height);
+  x.fillStyle = '#cc1f1f';
+  x.fillRect(0, 0, c.width, 150);
+  x.fillStyle = '#fff';
+  x.textAlign = 'center';
+  x.font = '800 56px Helvetica, Arial, sans-serif';
+  x.fillText('EMERGENCY', c.width / 2, 62);
+  x.fillText('EXIT ONLY', c.width / 2, 122);
+  x.fillStyle = '#cc1f1f';
+  x.font = '700 30px Helvetica, Arial, sans-serif';
+  x.fillText('ALARM WILL SOUND', c.width / 2, 205);
+  x.font = '600 24px Helvetica, Arial, sans-serif';
+  x.fillStyle = '#222';
+  x.fillText('WHEN DOOR IS OPENED', c.width / 2, 250);
+  x.strokeStyle = '#cc1f1f'; x.lineWidth = 8;
+  x.strokeRect(4, 4, c.width - 8, c.height - 8);
+  return finish(c);
+}
+
+// ---- Card-reader face (screen + keypad), like the handheld terminal --
+function cardReaderFace() {
+  const c = makeCanvas(360, 520);
+  const x = c.getContext('2d');
+  const rr = (px, py, w, h, r) => {
+    x.beginPath();
+    x.moveTo(px + r, py);
+    x.arcTo(px + w, py, px + w, py + h, r);
+    x.arcTo(px + w, py + h, px, py + h, r);
+    x.arcTo(px, py + h, px, py, r);
+    x.arcTo(px, py, px + w, py, r);
+    x.closePath();
+  };
+  // matte black body
+  x.fillStyle = '#1b1b1d';
+  rr(0, 0, c.width, c.height, 60); x.fill();
+  // screen
+  x.fillStyle = '#050608';
+  rr(70, 50, 220, 150, 12); x.fill();
+  x.fillStyle = '#10243f';
+  rr(80, 60, 200, 130, 8); x.fill();
+  // tiny LED
+  x.fillStyle = '#e8e8e8';
+  x.beginPath(); x.arc(c.width / 2, 230, 3, 0, 7); x.fill();
+
+  // keypad
+  const keys = [
+    ['1', '2', '3'],
+    ['4', '5', '6'],
+    ['7', '8', '9'],
+  ];
+  const kw = 70, kh = 52, gx = 46, gy = 270, sx = 86, sy = 62;
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  keys.forEach((row, r) => {
+    row.forEach((k, col) => {
+      const px = gx + col * sx, py = gy + r * sy;
+      x.fillStyle = '#3a3b3e';
+      rr(px, py, kw, kh, 12); x.fill();
+      x.fillStyle = '#f2f2f2';
+      x.font = '600 30px Helvetica, Arial, sans-serif';
+      x.fillText(k, px + kw / 2, py + kh / 2 + 2);
+    });
+  });
+  // bottom row: red X, 0, green enter
+  const by = gy + 3 * sy;
+  const bottom = [
+    ['✕', '#7a1d18', '#ff5a4d'],
+    ['0', '#3a3b3e', '#f2f2f2'],
+    ['↵', '#1c5e2a', '#5dff8a'],
+  ];
+  bottom.forEach((b, col) => {
+    const px = gx + col * sx;
+    x.fillStyle = b[1];
+    rr(px, by, kw, kh, 12); x.fill();
+    x.fillStyle = b[2];
+    x.font = '700 28px Helvetica, Arial, sans-serif';
+    x.fillText(b[0], px + kw / 2, by + kh / 2 + 2);
+  });
+  // power/settings dot upper-right of keypad
+  x.fillStyle = '#3a3b3e';
+  rr(c.width - 70, 250, 40, 30, 8); x.fill();
+  x.strokeStyle = '#cfcfcf'; x.lineWidth = 2;
+  x.beginPath(); x.arc(c.width - 50, 265, 7, 0.3, 6.0); x.stroke();
+  return finish(c);
+}
+
+// ---- Avantco fridge logo (blue script) -------------------------------
+function avantcoLogo() {
+  const c = makeCanvas(340, 110);
+  const x = c.getContext('2d');
+  x.clearRect(0, 0, c.width, c.height);
+  x.fillStyle = '#13347a';
+  x.font = 'italic 800 64px Georgia, "Times New Roman", serif';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText('Avantco', c.width / 2, c.height / 2 + 4);
+  // tiny REFRIGERATION tag above
+  x.font = '600 13px Helvetica, Arial, sans-serif';
+  x.fillText('REFRIGERATION', c.width / 2, 20);
+  // underline swoosh
+  x.strokeStyle = '#13347a'; x.lineWidth = 4;
+  x.beginPath(); x.moveTo(60, 84); x.quadraticCurveTo(170, 100, 290, 74); x.stroke();
+  return finish(c);
+}
+
+// ---- Vantco warmer red control panel ---------------------------------
+function vantcoPanel() {
+  const c = makeCanvas(520, 120);
+  const x = c.getContext('2d');
+  x.fillStyle = '#bf2017'; x.fillRect(0, 0, c.width, c.height);
+  // subtle top highlight
+  x.fillStyle = 'rgba(255,255,255,0.12)'; x.fillRect(0, 0, c.width, 10);
+  // left rocker switch
+  x.fillStyle = '#1b1b1b'; x.fillRect(24, 40, 34, 44);
+  // digital display
+  x.fillStyle = '#0a0a0a'; x.fillRect(78, 38, 90, 48);
+  x.fillStyle = '#33ff62'; x.font = '700 30px "Courier New", monospace';
+  x.textAlign = 'left'; x.textBaseline = 'middle';
+  x.fillText('180', 90, 64);
+  // Vantco wordmark
+  x.fillStyle = '#ffffff'; x.font = 'italic 800 40px Georgia, serif';
+  x.fillText('Vantco', 188, 62);
+  return finish(c);
+}
+
+// ---- caution hot surface decal ---------------------------------------
+function cautionDecal() {
+  const c = makeCanvas(360, 60);
+  const x = c.getContext('2d');
+  x.clearRect(0, 0, c.width, c.height);
+  x.fillStyle = '#b0140c';
+  x.font = '700 30px Helvetica, Arial, sans-serif';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText('CAUTION — HOT SURFACE', c.width / 2, c.height / 2);
+  return finish(c);
+}
+
+// ---- Cayenne-style warmer front label (black lens + red flames) ------
+function cayenneLabel() {
+  const c = makeCanvas(220, 320);
+  const x = c.getContext('2d');
+  x.clearRect(0, 0, c.width, c.height);
+  // black lens panel
+  x.fillStyle = '#101011';
+  x.beginPath();
+  x.ellipse(c.width / 2, c.height / 2, 64, 150, 0, 0, 7);
+  x.fill();
+  // red flames
+  x.fillStyle = '#d8241c';
+  const fx = c.width / 2, fy = c.height / 2 + 40;
+  const flame = (ox, scale) => {
+    x.beginPath();
+    x.moveTo(fx + ox, fy);
+    x.bezierCurveTo(fx + ox - 18 * scale, fy - 40 * scale, fx + ox + 10 * scale, fy - 55 * scale, fx + ox + 2 * scale, fy - 95 * scale);
+    x.bezierCurveTo(fx + ox + 26 * scale, fy - 60 * scale, fx + ox + 30 * scale, fy - 30 * scale, fx + ox, fy);
+    x.fill();
+  };
+  flame(-18, 0.9); flame(14, 1.1); flame(-2, 0.7);
+  // cayenne wordmark
+  x.fillStyle = '#ffffff';
+  x.font = '600 26px Helvetica, Arial, sans-serif';
+  x.textAlign = 'center';
+  x.fillText('cayenne', c.width / 2, c.height / 2 - 70);
+  // vollrath footer
+  x.font = '700 15px Helvetica, Arial, sans-serif';
+  x.fillText('VOLLRATH', c.width / 2, c.height / 2 + 120);
+  return finish(c);
+}
+
+// ---- exterior daylight (seen through windows) ------------------------
+function exteriorTexture() {
+  const c = makeCanvas(1024, 1024);
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, c.height);
+  g.addColorStop(0, '#cfe2f2');
+  g.addColorStop(0.5, '#eaf2f8');
+  g.addColorStop(0.62, '#dfe6e0');
+  g.addColorStop(1, '#b9bdb5');
+  x.fillStyle = g; x.fillRect(0, 0, c.width, c.height);
+  // horizon / distant trees + lot
+  x.fillStyle = '#9fb08c';
+  x.fillRect(0, c.height * 0.58, c.width, c.height * 0.06);
+  x.fillStyle = '#8a8f86';
+  x.fillRect(0, c.height * 0.64, c.width, c.height * 0.36);
+  // parking stripes
+  x.strokeStyle = 'rgba(240,240,235,0.5)'; x.lineWidth = 4;
+  for (let i = 0; i < 8; i++) {
+    const px = (i / 8) * c.width + 30;
+    x.beginPath(); x.moveTo(px, c.height * 0.66); x.lineTo(px - 40, c.height); x.stroke();
+  }
+  // blown-out sun glow
+  const sg = x.createRadialGradient(c.width * 0.7, c.height * 0.42, 10, c.width * 0.7, c.height * 0.42, 420);
+  sg.addColorStop(0, 'rgba(255,255,255,0.95)');
+  sg.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = sg; x.fillRect(0, 0, c.width, c.height);
+  return finish(c);
+}
+
+// ---- Cayenne flame decal (red flames on a dark band) -----------------
+function cayenneDecal() {
+  const c = makeCanvas(512, 256);
+  const x = c.getContext('2d');
+  x.clearRect(0, 0, c.width, c.height);
+  // dark vertical band the decal sits on
+  const bg = x.createLinearGradient(0, 0, c.width, 0);
+  bg.addColorStop(0, 'rgba(20,20,22,0)');
+  bg.addColorStop(0.18, 'rgba(18,18,20,0.95)');
+  bg.addColorStop(0.82, 'rgba(18,18,20,0.95)');
+  bg.addColorStop(1, 'rgba(20,20,22,0)');
+  x.fillStyle = bg; x.fillRect(0, 0, c.width, c.height);
+  // "cayenne" wordmark
+  x.fillStyle = '#f3f3f3';
+  x.font = 'italic 700 56px Georgia, serif';
+  x.textAlign = 'center';
+  x.fillText('cayenne', c.width / 2, 70);
+  // flame shapes (red/orange) below the text
+  function flame(cx, base, w, h, col) {
+    x.fillStyle = col;
+    x.beginPath();
+    x.moveTo(cx, base);
+    x.bezierCurveTo(cx - w, base - h * 0.4, cx - w * 0.5, base - h * 0.7, cx - w * 0.2, base - h);
+    x.bezierCurveTo(cx, base - h * 0.7, cx + w * 0.2, base - h * 0.9, cx + w * 0.5, base - h * 0.6);
+    x.bezierCurveTo(cx + w, base - h * 0.4, cx + w * 0.4, base - h * 0.1, cx, base);
+    x.fill();
+  }
+  flame(c.width / 2, 200, 70, 110, '#d8281e');
+  flame(c.width / 2 - 38, 200, 46, 78, '#f26a1b');
+  flame(c.width / 2 + 40, 200, 50, 88, '#f26a1b');
+  flame(c.width / 2, 200, 34, 60, '#ffc23b');
+  // Vollrath baseline
+  x.fillStyle = '#cfcfcf';
+  x.font = '700 22px Arial, sans-serif';
+  x.fillText('VOLLRATH', c.width / 2, 236);
+  return finish(c);
+}
+
+// ---- WisePad-style card-reader face ----------------------------------
+function wisePadFace() {
+  const c = makeCanvas(300, 480);
+  const x = c.getContext('2d');
+  // body
+  x.fillStyle = '#1b1c1e';
+  x.fillRect(0, 0, c.width, c.height);
+  // screen
+  x.fillStyle = '#0a1622';
+  x.fillRect(46, 40, 208, 150);
+  const sg = x.createLinearGradient(46, 40, 46, 190);
+  sg.addColorStop(0, '#16344f'); sg.addColorStop(1, '#0a1622');
+  x.fillStyle = sg; x.fillRect(48, 42, 204, 146);
+  x.fillStyle = '#dfe8f0';
+  x.font = '600 22px Helvetica, Arial, sans-serif';
+  x.textAlign = 'center';
+  x.fillText('TAP  ·  INSERT', c.width / 2, 110);
+  x.fillStyle = '#7fd0a0';
+  x.font = '700 26px Helvetica, Arial, sans-serif';
+  x.fillText('$22.25', c.width / 2, 150);
+  // contactless dot
+  x.fillStyle = '#3a3c40';
+  x.beginPath(); x.arc(c.width / 2, 212, 5, 0, 7); x.fill();
+  // keypad 4 rows x 3 + side column
+  const keys = [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['✱', '0', '#']];
+  const startY = 250, gap = 54, kx = [70, 150, 230];
+  keys.forEach((row, r) => {
+    row.forEach((k, ci) => {
+      x.fillStyle = '#34363a';
+      x.beginPath(); x.arc(kx[ci], startY + r * gap, 22, 0, 7); x.fill();
+      x.fillStyle = '#e8e8ea';
+      x.font = '700 22px Helvetica, Arial, sans-serif';
+      x.fillText(k, kx[ci], startY + r * gap + 8);
+    });
+  });
+  // colored action keys on the right edge
+  const acts = [['#cc2b27', 248, 300], ['#e8b91f', 248, 366], ['#2faa55', 248, 432]];
+  // (drawn as small circles already covered by '#'); add red/green/yellow accents
+  x.fillStyle = '#cc2b27'; x.beginPath(); x.arc(70, 412, 22, 0, 7); x.fill();
+  x.fillStyle = '#e8b91f'; x.beginPath(); x.arc(150, 412, 22, 0, 7); x.fill();
+  x.fillStyle = '#2faa55'; x.beginPath(); x.arc(230, 412, 22, 0, 7); x.fill();
+  x.fillStyle = '#fff'; x.font = '700 22px Helvetica, Arial, sans-serif';
+  x.fillText('✕', 70, 420); x.fillText('⌫', 150, 420); x.fillText('⏎', 230, 420);
+  return finish(c);
+}
+
+// ---- landscape iPad POS screen ---------------------------------------
+function posScreenWide() {
+  const c = makeCanvas(1200, 900);
+  const x = c.getContext('2d');
+  x.fillStyle = '#15171c'; x.fillRect(0, 0, c.width, c.height);
+  // left order rail
+  x.fillStyle = '#1d2027'; x.fillRect(0, 0, 380, c.height);
+  x.fillStyle = '#d6402a';
+  x.font = '700 54px Georgia, serif'; x.textAlign = 'left';
+  x.fillText('fooda', 36, 80);
+  x.fillStyle = '#8a909c'; x.font = '500 24px Helvetica, Arial, sans-serif';
+  x.fillText('Order #214', 36, 120);
+  const order = [['Herb Chicken', '10.50'], ['Grain Bowl', '9.25'], ['Cold Brew', '3.50']];
+  let oy = 180;
+  order.forEach(([n, p]) => {
+    x.fillStyle = '#e7e9ee'; x.font = '500 28px Helvetica, Arial, sans-serif';
+    x.fillText(n, 36, oy);
+    x.textAlign = 'right'; x.fillStyle = '#b9bdc6';
+    x.fillText('$' + p, 344, oy); x.textAlign = 'left';
+    oy += 50;
+  });
+  x.strokeStyle = '#2c303a'; x.beginPath(); x.moveTo(36, oy); x.lineTo(344, oy); x.stroke();
+  x.fillStyle = '#fff'; x.font = '700 34px Helvetica, Arial, sans-serif';
+  x.fillText('Total', 36, oy + 56);
+  x.textAlign = 'right'; x.fillText('$23.25', 344, oy + 56); x.textAlign = 'left';
+  // green charge button
+  x.fillStyle = '#2ecc71';
+  x.beginPath(); x.roundRect(36, c.height - 110, 308, 70, 14); x.fill();
+  x.fillStyle = '#fff'; x.font = '700 30px Helvetica, Arial, sans-serif'; x.textAlign = 'center';
+  x.fillText('Charge Card', 190, c.height - 65);
+  // right item grid
+  const items = [
+    ['Herb Chicken', '$10.50', '#3a4a3f'], ['BBQ Beef Bowl', '$11.75', '#4a3a3a'],
+    ['Veg Pasta', '$9.95', '#3f3a4a'], ['Grain Bowl', '$9.25', '#4a463a'],
+    ['Caesar Combo', '$8.95', '#3a464a'], ['Fruit Cup', '$3.25', '#3f4a3a'],
+    ['Brownie', '$2.75', '#4a3f33'], ['Cold Brew', '$3.50', '#33414a'],
+  ];
+  const gx0 = 420, gy0 = 40, tw = 350, th = 190, cgap = 28;
+  items.forEach((it, i) => {
+    const cx = gx0 + (i % 2) * (tw + cgap);
+    const cy = gy0 + Math.floor(i / 2) * (th + cgap);
+    x.fillStyle = it[2];
+    x.beginPath(); x.roundRect(cx, cy, tw, th, 18); x.fill();
+    x.fillStyle = '#fff'; x.font = '600 34px Helvetica, Arial, sans-serif'; x.textAlign = 'left';
+    x.fillText(it[0], cx + 26, cy + th - 58);
+    x.fillStyle = '#ffd9cf'; x.font = '700 30px Helvetica, Arial, sans-serif';
+    x.fillText(it[1], cx + 26, cy + th - 22);
+  });
+  return finish(c);
+}
+
+  return { woodTexture, concreteTexture, concreteRoughness, foodaLogo, orderDisplay, menuBoard, posScreen, emergencySign, cardReaderFace, avantcoLogo, vantcoPanel, cautionDecal, cayenneLabel, exteriorTexture, cayenneDecal, wisePadFace, posScreenWide };
+})();
+
+// ===== environment.js =====
+const { buildEnvironment } = (() => {
+
+// Builds a clean, brightly-and-evenly-lit showroom shell:
+// matte (non-reflective) floor, plain light walls on all four sides,
+// no windows / doors / signage, soft even lighting.
+function buildEnvironment(scene) {
+  const ROOM = { w: 17, d: 13, h: 4.3 };
+  const halfW = ROOM.w / 2, halfD = ROOM.d / 2;
+
+  // ---------------- FLOOR (matte, non-reflective) ---------------------
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(ROOM.w, ROOM.d),
+    new THREE.MeshStandardMaterial({ color: 0xc7c4bd, roughness: 0.98, metalness: 0.0 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // ---------------- CEILING -------------------------------------------
+  const ceiling = new THREE.Mesh(
+    new THREE.PlaneGeometry(ROOM.w, ROOM.d),
+    new THREE.MeshStandardMaterial({ color: 0xe6e3dd, roughness: 1.0 })
+  );
+  ceiling.rotation.x = Math.PI / 2;
+  ceiling.position.y = ROOM.h;
+  scene.add(ceiling);
+
+  // recessed ceiling light panels for even showroom illumination
+  const panelMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.4, roughness: 0.5,
+  });
+  [[-4.5, -2.5], [-4.5, 2.5], [0, -2.5], [0, 2.5], [4.5, -2.5], [4.5, 2.5]].forEach(([px, pz]) => {
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.55), panelMat);
+    p.rotation.x = Math.PI / 2;
+    p.position.set(px, ROOM.h - 0.015, pz);
+    scene.add(p);
+  });
+
+  // ---------------- WALLS (clean light showroom) ----------------------
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xd8d5ce, roughness: 0.97 });
+  const mkWall = (w, x, z, ry) => {
+    const wall = new THREE.Mesh(new THREE.PlaneGeometry(w, ROOM.h), wallMat);
+    wall.position.set(x, ROOM.h / 2, z);
+    wall.rotation.y = ry;
+    wall.receiveShadow = true;
+    scene.add(wall);
+  };
+  mkWall(ROOM.w, 0, -halfD, 0);            // back
+  mkWall(ROOM.w, 0, halfD, Math.PI);       // front
+  mkWall(ROOM.d, -halfW, 0, Math.PI / 2);  // left
+  mkWall(ROOM.d, halfW, 0, -Math.PI / 2);  // right
+
+  // ---------------- LIGHTING (bright + even) --------------------------
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xc7c4bd, 0.55));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+
+  // soft key from above for gentle grounding shadows
+  const key = new THREE.DirectionalLight(0xffffff, 1.0);
+  key.position.set(3.5, 8.5, 6);
+  key.target.position.set(0.5, 0.5, -2.6);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.camera.near = 1;
+  key.shadow.camera.far = 32;
+  key.shadow.camera.left = -12;
+  key.shadow.camera.right = 12;
+  key.shadow.camera.top = 10;
+  key.shadow.camera.bottom = -8;
+  key.shadow.bias = -0.0004;
+  key.shadow.normalBias = 0.02;
+  scene.add(key);
+  scene.add(key.target);
+
+  // shadowless fills from the other directions to keep everything even
+  const fillA = new THREE.DirectionalLight(0xffffff, 0.38);
+  fillA.position.set(-6, 5, 4);
+  scene.add(fillA);
+  const fillB = new THREE.DirectionalLight(0xffffff, 0.28);
+  fillB.position.set(2, 4, -7);
+  scene.add(fillB);
+
+  return { sun: key, ROOM };
+}
+
+  return { buildEnvironment };
+})();
+
+// ===== equipment.js =====
+const { buildEquipment } = (() => {
+
+function rand(a, b) { return a + Math.random() * (b - a); }
+
+// Material library --------------------------------------------------
+const M = {
+  cabinet: () => new THREE.MeshStandardMaterial({ color: 0x66696d, roughness: 0.55, metalness: 0.2 }),
+  cabinetDark: () => new THREE.MeshStandardMaterial({ color: 0x4a4d51, roughness: 0.6, metalness: 0.2 }),
+  steel: () => new THREE.MeshStandardMaterial({ color: 0xa9adb3, roughness: 0.34, metalness: 0.82, envMapIntensity: 0.85 }),
+  steelDark: () => new THREE.MeshStandardMaterial({ color: 0x7c8088, roughness: 0.4, metalness: 0.8, envMapIntensity: 0.7 }),
+  panSteel: () => new THREE.MeshStandardMaterial({ color: 0xb3b7bd, roughness: 0.26, metalness: 0.88, envMapIntensity: 0.95 }),
+  rubber: () => new THREE.MeshStandardMaterial({ color: 0x141519, roughness: 0.8, metalness: 0.1 }),
+  black: () => new THREE.MeshStandardMaterial({ color: 0x101113, roughness: 0.5, metalness: 0.3 }),
+  tube: () => new THREE.MeshStandardMaterial({ color: 0x0c0d0f, roughness: 0.4, metalness: 0.6, envMapIntensity: 0.7 }),
+  glass: () => new THREE.MeshStandardMaterial({
+    color: 0xdfe6ea, roughness: 0.06, metalness: 0.0,
+    transparent: true, opacity: 0.14, envMapIntensity: 1.3, side: THREE.DoubleSide,
+  }),
+};
+
+function woodTop(w, d, thick = 0.07) {
+  const tex = woodTexture();
+  tex.repeat.set(Math.max(1, w / 1.2), 1);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.4, metalness: 0.04 });
+  const edge = new THREE.MeshStandardMaterial({ color: 0xd2ab6c, roughness: 0.45 });
+  const top = new THREE.Mesh(new THREE.BoxGeometry(w, thick, d), [edge, edge, mat, mat, edge, edge]);
+  top.castShadow = true; top.receiveShadow = true;
+  return top;
+}
+
+function caster() {
+  const g = new THREE.Group();
+  const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.05, 18), M.rubber());
+  wheel.rotation.z = Math.PI / 2;
+  wheel.castShadow = true;
+  const fork = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.11, 0.08), M.steelDark());
+  fork.position.y = 0.11;
+  g.add(wheel, fork);
+  return g;
+}
+
+// A wheeled fooda counter cabinet with a butcher-block top -----------
+// logoSides: array of 'front' | 'back' | 'left' | 'right'
+// Door detailing matching the steel workbench cabinet reference:
+// large framed doors with a recessed centre panel + a chrome latch handle.
+function addDoorDetail(g, side, w, d, h, handles) {
+  const dy = h / 2 + 0.16;
+  const dh = h - 0.16;
+  const along = (side === 'front' || side === 'back') ? w : d;
+  const nDoors = Math.max(2, Math.round(along / 1.25));
+  const frameMat = M.cabinet();
+  const panelMat = M.cabinetDark();
+  const chrome = new THREE.MeshStandardMaterial({ color: 0xd6d9dd, roughness: 0.22, metalness: 0.95, envMapIntensity: 1.2 });
+
+  const face = new THREE.Group();
+  if (side === 'front') { face.position.z = d / 2; }
+  if (side === 'back') { face.position.z = -d / 2; face.rotation.y = Math.PI; }
+  if (side === 'right') { face.position.x = w / 2; face.rotation.y = Math.PI / 2; }
+  if (side === 'left') { face.position.x = -w / 2; face.rotation.y = -Math.PI / 2; }
+
+  const gap = 0.02;
+  const slot = (along - 0.04) / nDoors;
+  const dw = slot - gap;
+  const ft = 0.035; // raised frame thickness
+  for (let i = 0; i < nDoors; i++) {
+    const cx = -along / 2 + 0.02 + slot / 2 + i * slot;
+    // recessed centre panel (sits at the body surface)
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(dw - ft, dh - ft, 0.006), panelMat);
+    panel.position.set(cx, dy, 0.002);
+    face.add(panel);
+    // raised frame border (four bars, proud of the surface)
+    const mkBar = (bw, bh, bx, by) => {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.016), frameMat);
+      bar.position.set(cx + bx, dy + by, 0.009);
+      face.add(bar);
+    };
+    mkBar(dw, ft, 0, dh / 2 - ft / 2);
+    mkBar(dw, ft, 0, -(dh / 2 - ft / 2));
+    mkBar(ft, dh, -(dw / 2 - ft / 2), 0);
+    mkBar(ft, dh, dw / 2 - ft / 2, 0);
+
+    // chrome paddle latch near the inner edge of each door
+    if (handles) {
+      const inner = (i % 2 === 0 ? dw / 2 - 0.07 : -dw / 2 + 0.07);
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.075, 0.012), chrome);
+      plate.position.set(cx + inner, dy, 0.018);
+      face.add(plate);
+      const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.03, 14), chrome);
+      knob.rotation.x = Math.PI / 2;
+      knob.position.set(cx + inner, dy, 0.03);
+      face.add(knob);
+    }
+  }
+  g.add(face);
+}
+
+// A wheeled fooda counter cabinet with a butcher-block top -----------
+// logoSides: array of 'front' | 'back' | 'left' | 'right'
+function buildCounter({ w, d, h = 0.9, logoSides = ['front'] }) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), M.cabinet());
+  body.position.y = h / 2 + 0.16;
+  body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+
+  const kick = new THREE.Mesh(new THREE.BoxGeometry(w - 0.06, 0.05, d - 0.06), M.cabinetDark());
+  kick.position.y = 0.18;
+  g.add(kick);
+
+  // metal corner brackets (like the photo's bolted edges)
+  const bracketMat = M.steelDark();
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
+    const br = new THREE.Mesh(new THREE.BoxGeometry(0.04, h - 0.05, 0.04), bracketMat);
+    br.position.set(sx * (w / 2 - 0.02), h / 2 + 0.16, sz * (d / 2 - 0.02));
+    g.add(br);
+  });
+
+  // storage doors only on the staff/INSIDE face (the outside stays clean)
+  addDoorDetail(g, 'back', w, d, h, true);
+
+  const top = woodTop(w + 0.06, d + 0.06);
+  top.position.y = h + 0.16 + 0.035;
+  g.add(top);
+
+  // fooda logo decals
+  const tex = foodaLogo({ scale: 1 });
+  const aspect = tex.image.width / tex.image.height;
+  const lh = h * 0.4;
+  logoSides.forEach((side) => {
+    const lw = Math.min(lh * aspect, 1.7); // fixed so every counter's logo matches
+    const decal = new THREE.Mesh(
+      new THREE.PlaneGeometry(lw, lh),
+      new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.55 })
+    );
+    const y = h / 2 + 0.16;
+    if (side === 'front') decal.position.set(0, y, d / 2 + 0.02);
+    if (side === 'back') { decal.position.set(0, y, -d / 2 - 0.02); decal.rotation.y = Math.PI; }
+    if (side === 'right') { decal.position.set(w / 2 + 0.02, y, 0); decal.rotation.y = Math.PI / 2; }
+    if (side === 'left') { decal.position.set(-w / 2 - 0.02, y, 0); decal.rotation.y = -Math.PI / 2; }
+    g.add(decal);
+  });
+
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
+    const c = caster();
+    c.position.set(sx * (w / 2 - 0.13), 0.075, sz * (d / 2 - 0.13));
+    g.add(c);
+  });
+  g.userData.height = h + 0.16 + 0.07;
+  g.userData.size = { w, d };
+  return g;
+}
+
+// Hot-well station: N individual Cayenne-style countertop warmers -----
+function buildWellStation(n) {
+  const g = new THREE.Group();
+  const uw = 0.44, ud = 0.6, bh = 0.17, footH = 0.05, gap = 0.05;
+  const rimT = 0.035, rimH = 0.04;
+  const totalW = n * uw + (n - 1) * gap;
+  const foods = [0xb5742e, 0x6f8a3a, 0xc8a23a, 0x9a3f2a, 0xcdb98a];
+  const labelTex = cayenneLabel();
+  const steam = [];
+
+  for (let i = 0; i < n; i++) {
+    const cx = -totalW / 2 + uw / 2 + i * (uw + gap);
+    const unit = new THREE.Group();
+    unit.position.x = cx;
+    unit.rotation.y = Math.PI; // controls/label face the staff (back) side
+
+    // black plastic feet
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.08, footH, 0.1), M.black());
+      foot.position.set(sx * (uw / 2 - 0.06), footH / 2, sz * (ud / 2 - 0.07));
+      unit.add(foot);
+    });
+
+    // stainless body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(uw, bh, ud), M.steel());
+    body.position.y = footH + bh / 2;
+    body.castShadow = true; body.receiveShadow = true;
+    unit.add(body);
+
+    // black plastic top rim (4 bars around the opening)
+    const rimY = footH + bh;
+    [-1, 1].forEach((sz) => {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(uw + 0.02, rimH, rimT), M.black());
+      bar.position.set(0, rimY + rimH / 2, sz * (ud / 2 - rimT / 2 + 0.005));
+      unit.add(bar);
+    });
+    [-1, 1].forEach((sx) => {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(rimT, rimH, ud + 0.02), M.black());
+      bar.position.set(sx * (uw / 2 - rimT / 2 + 0.005), rimY + rimH / 2, 0);
+      unit.add(bar);
+    });
+
+    // dark recessed well + food
+    const well = new THREE.Mesh(new THREE.BoxGeometry(uw - 0.09, 0.12, ud - 0.09),
+      new THREE.MeshStandardMaterial({ color: 0x55585d, roughness: 0.35, metalness: 0.75 }));
+    well.position.y = rimY - 0.05;
+    unit.add(well);
+    const food = new THREE.Mesh(new THREE.BoxGeometry(uw - 0.12, 0.06, ud - 0.12),
+      new THREE.MeshStandardMaterial({ color: foods[i % foods.length], roughness: 0.85 }));
+    food.position.y = rimY - 0.01;
+    unit.add(food);
+
+    // front control panel (black) with two knobs near the base
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(uw * 0.62, 0.055, 0.014), M.black());
+    panel.position.set(0, footH + 0.035, ud / 2 + 0.006);
+    unit.add(panel);
+    [-0.045, 0.045].forEach((kx) => {
+      const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.014, 14), M.steelDark());
+      knob.rotation.x = Math.PI / 2;
+      knob.position.set(kx, footH + 0.035, ud / 2 + 0.016);
+      unit.add(knob);
+    });
+
+    // cayenne flame label on the front face
+    const label = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.14),
+      new THREE.MeshStandardMaterial({ map: labelTex, transparent: true, roughness: 0.5 }));
+    label.position.set(0, footH + bh / 2 + 0.015, ud / 2 + 0.007);
+    unit.add(label);
+
+    g.add(unit);
+
+    // steam sprites per unit
+    for (let s = 0; s < 3; s++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
+      sp.scale.set(0.16, 0.16, 0.16);
+      sp.position.set(cx + rand(-0.1, 0.1), rimY + 0.06, rand(-0.18, 0.18));
+      sp.userData = { baseY: rimY + 0.06, speed: rand(0.18, 0.4), phase: rand(0, 6.28) };
+      g.add(sp); steam.push(sp);
+    }
+  }
+  g.userData = { steam, serving: false, span: totalW, depth: ud, topH: footH + bh + rimH };
+  return g;
+}
+
+// Clean sneeze guard: black clips at the FRONT of the table holding plexiglass
+function buildSneezeGuard(w, d) {
+  const g = new THREE.Group();
+  const black = new THREE.MeshStandardMaterial({ color: 0x0c0d0f, roughness: 0.45, metalness: 0.35 });
+  const plexi = new THREE.MeshStandardMaterial({
+    color: 0xd7e3ea, roughness: 0.05, metalness: 0.0,
+    transparent: true, opacity: 0.26, envMapIntensity: 1.4, side: THREE.DoubleSide,
+  });
+  const postH = 0.32;
+  const hw = w / 2;
+  const clipZ = d / 2 - 0.06;          // clips sit at the FRONT edge of the table
+  const headZ = clipZ - 0.04;          // panel grips just behind the clip, over the food
+  const tilt = -0.6;                   // panel leans BACK over the wells
+  const uy = Math.cos(tilt), uz = Math.sin(tilt); // panel up-axis (0, uy, uz); uz < 0 → leans back
+  const baseY = 0.055 + postH;
+  const panelH = 0.4;
+
+  [-hw, hw].forEach((x) => {
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.055, 0.11), black);
+    base.position.set(x, 0.028, clipZ);
+    g.add(base);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, postH, 16), black);
+    post.position.set(x, 0.055 + postH / 2, clipZ);
+    g.add(post);
+    const clip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.075, 0.055), black);
+    clip.position.set(x, baseY, headZ);
+    clip.rotation.x = tilt;
+    g.add(clip);
+  });
+
+  const cy = baseY + (panelH / 2) * uy;
+  const cz = headZ + (panelH / 2) * uz;
+  const panel = new THREE.Mesh(new THREE.PlaneGeometry(w + 0.14, panelH), plexi);
+  panel.position.set(0, cy, cz);
+  panel.rotation.x = tilt;
+  g.add(panel);
+  // black edge trim, four sides, for a clean framed look
+  [-panelH / 2, panelH / 2].forEach((off) => {
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.14, 0.016, 0.016), black);
+    trim.position.set(0, baseY + (panelH / 2 + off) * uy, headZ + (panelH / 2 + off) * uz);
+    g.add(trim);
+  });
+  [-1, 1].forEach((sx) => {
+    const sideTrim = new THREE.Mesh(new THREE.BoxGeometry(0.016, panelH, 0.016), black);
+    sideTrim.position.set(sx * (w + 0.14) / 2, cy, cz);
+    sideTrim.rotation.x = tilt;
+    g.add(sideTrim);
+  });
+
+  g.userData.height = baseY + panelH * uy;
+  return g;
+}
+
+// Tall stainless reach-in fridge (Avantco-style) ---------------------
+// Heavy-duty swivel caster (for the fridge / warmer) -----------------
+function applianceCaster() {
+  const g = new THREE.Group();
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.022, 0.1), M.black());
+  plate.position.y = 0.155;
+  const swivel = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.07, 0.06), M.steelDark());
+  swivel.position.y = 0.1;
+  const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.045, 20), M.rubber());
+  wheel.rotation.z = Math.PI / 2; wheel.position.y = 0.062;
+  wheel.castShadow = true;
+  g.add(plate, swivel, wheel);
+  return g;
+}
+function addAppCasters(g, W, D) {
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
+    const c = applianceCaster();
+    c.position.set(sx * (W / 2 - 0.1), 0, sz * (D / 2 - 0.1));
+    g.add(c);
+  });
+}
+const APP_LIFT = 0.165; // height the casters raise the cabinets
+
+// Tall stainless reach-in fridge (Avantco, solid door) ---------------
+function buildFridge() {
+  const g = new THREE.Group();
+  const W = 0.8, H = 1.9, D = 0.84, lift = APP_LIFT;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), M.steel());
+  body.position.y = lift + H / 2; body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+
+  const headerH = 0.28;
+  // header / door seam
+  const seam = new THREE.Mesh(new THREE.BoxGeometry(W - 0.04, 0.012, 0.012), M.steelDark());
+  seam.position.set(0, lift + H - headerH, D / 2 + 0.006); g.add(seam);
+
+  // door (proud panel), leaving a louvered base section at the bottom
+  const baseSec = 0.24;
+  const doorTop = lift + H - headerH - 0.03;
+  const doorBottom = lift + baseSec;
+  const doorH = doorTop - doorBottom;
+  const doorY = (doorTop + doorBottom) / 2;
+  const door = new THREE.Mesh(new THREE.BoxGeometry(W - 0.05, doorH, 0.02), M.steel());
+  door.position.set(0, doorY, D / 2 + 0.006); door.castShadow = true; g.add(door);
+  // left vertical reveal of the door
+  const dseam = new THREE.Mesh(new THREE.BoxGeometry(0.012, doorH, 0.014), M.steelDark());
+  dseam.position.set(-W / 2 + 0.045, doorY, D / 2 + 0.01); g.add(dseam);
+
+  // Avantco logo (header, left)
+  const logo = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.09),
+    new THREE.MeshStandardMaterial({ map: avantcoLogo(), transparent: true, roughness: 0.5 }));
+  logo.position.set(-0.07, lift + H - headerH / 2, D / 2 + 0.012); g.add(logo);
+  // digital control display (header, right)
+  const dispBox = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.062, 0.014), M.black());
+  dispBox.position.set(0.25, lift + H - headerH / 2, D / 2 + 0.012); g.add(dispBox);
+  const led = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.034),
+    new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: 0x2bd14a, emissiveIntensity: 0.8, roughness: 0.3 }));
+  led.position.set(0.25, lift + H - headerH / 2, D / 2 + 0.02); g.add(led);
+
+  // recessed black pocket handle, left side of door, vertically centred
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.2, 0.028), M.black());
+  handle.position.set(-W / 2 + 0.13, doorY, D / 2 + 0.012); g.add(handle);
+
+  // bottom louver grille
+  for (let i = 0; i < 3; i++) {
+    const slat = new THREE.Mesh(new THREE.BoxGeometry(W - 0.1, 0.03, 0.02), M.steelDark());
+    slat.position.set(0, lift + 0.05 + i * 0.055, D / 2 + 0.008); g.add(slat);
+  }
+
+  addAppCasters(g, W, D);
+  return g;
+}
+
+// Standing holding warmer (Vantco, clear glass door + red panel) -----
+function buildWarmer() {
+  const g = new THREE.Group();
+  const W = 0.6, H = 1.7, D = 0.74, lift = APP_LIFT;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), M.steel());
+  body.position.y = lift + H / 2; body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+
+  // red Vantco control panel at the bottom front
+  const panelH = 0.14;
+  const panelY = lift + 0.09;
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(W - 0.02, panelH, 0.02),
+    new THREE.MeshStandardMaterial({ map: vantcoPanel(), roughness: 0.5 }));
+  panel.position.set(0, panelY, D / 2 + 0.008); g.add(panel);
+  // two control knobs on the right of the panel
+  [0.1, 0.19].forEach((kx) => {
+    const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.03, 18), M.black());
+    knob.rotation.x = Math.PI / 2; knob.position.set(kx, panelY, D / 2 + 0.024); g.add(knob);
+    const tick = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.016, 0.006), M.steelDark());
+    tick.position.set(kx, panelY + 0.008, D / 2 + 0.04); g.add(tick);
+  });
+
+  // glass door (full length above the panel) with stainless frame
+  const doorBottom = panelY + panelH / 2 + 0.01;
+  const doorTop = lift + H - 0.05;
+  const doorH = doorTop - doorBottom;
+  const doorY = (doorTop + doorBottom) / 2;
+  const glass = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.1, doorH - 0.06), M.glass());
+  glass.position.set(0, doorY, D / 2 + 0.011); g.add(glass);
+  const ft = 0.035, frameMat = M.steelDark();
+  const mkF = (bw, bh, bx, by) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.022), frameMat);
+    b.position.set(bx, by, D / 2 + 0.012); g.add(b);
+  };
+  mkF(W - 0.05, ft, 0, doorTop); mkF(W - 0.05, ft, 0, doorBottom);
+  mkF(ft, doorH, -(W / 2 - 0.04), doorY); mkF(ft, doorH, (W / 2 - 0.04), doorY);
+
+  // wire shelves visible through the glass
+  for (let i = 0; i < 9; i++) {
+    const shelf = new THREE.Mesh(new THREE.BoxGeometry(W - 0.16, 0.006, D - 0.18), M.steelDark());
+    shelf.position.set(0, doorBottom + 0.07 + i * ((doorH - 0.12) / 8), 0); g.add(shelf);
+  }
+
+  // vertical door handle on the right
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.42, 12), M.steelDark());
+  handle.position.set(W / 2 - 0.05, doorY, D / 2 + 0.055); g.add(handle);
+
+  // interior warm light (toggle interaction)
+  const light = new THREE.PointLight(0xffcf8a, 0.0, 1.8, 2);
+  light.position.set(0, lift + H / 2, 0.05); g.add(light);
+
+  addAppCasters(g, W, D);
+  g.userData = { light, on: false };
+  return g;
+}
+
+// Wall-mounted TV menu board -----------------------------------------
+function buildTV() {
+  const g = new THREE.Group();
+  const W = 0.78, H = 1.3;
+  const bezel = new THREE.Mesh(new THREE.BoxGeometry(W + 0.04, H + 0.04, 0.05), M.black());
+  g.add(bezel);
+  const tex = menuBoard();
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(W, H),
+    new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.6, roughness: 0.22 }));
+  screen.position.z = 0.027;
+  g.add(screen);
+  return g;
+}
+
+// iPad POS on a stand — LANDSCAPE, dark ------------------------------
+function buildIpad() {
+  const g = new THREE.Group();
+  const dark = new THREE.MeshStandardMaterial({ color: 0x0c0d10, roughness: 0.4, metalness: 0.5 });
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.13, 0.025, 30), dark);
+  g.add(base);
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.13, 12), M.steelDark());
+  stem.position.y = 0.085; g.add(stem);
+  const tab = new THREE.Group();
+  // landscape body
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.215, 0.012), dark);
+  tab.add(body);
+  const tex = posScreen();
+  const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.275, 0.19),
+    new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.5, roughness: 0.2 }));
+  scr.position.z = 0.0075; tab.add(scr);
+  tab.position.set(0, 0.24, 0.015);
+  tab.rotation.x = -0.16;
+  g.add(tab);
+  return g;
+}
+
+// Card reader — black handheld terminal (screen + keypad) resting tilted
+function buildCardReader() {
+  const g = new THREE.Group();
+  const dark = new THREE.MeshStandardMaterial({ color: 0x161618, roughness: 0.55, metalness: 0.25 });
+  const bw = 0.1, bht = 0.17, bt = 0.024;
+  const tab = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(bw, bht, bt), dark);
+  body.castShadow = true;
+  tab.add(body);
+  // face graphic (screen + keypad)
+  const faceTex = cardReaderFace();
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(bw * 0.98, bht * 0.98),
+    new THREE.MeshStandardMaterial({ map: faceTex, transparent: true, roughness: 0.55 }));
+  face.position.z = bt / 2 + 0.001;
+  tab.add(face);
+  // lit screen overlay (for the approval flash)
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(bw * 0.56, bht * 0.26),
+    new THREE.MeshStandardMaterial({ color: 0x0a1a2a, emissive: 0x163a63, emissiveIntensity: 0.6, roughness: 0.3 }));
+  screen.position.set(0, bht * 0.245, bt / 2 + 0.003);
+  tab.add(screen);
+  // tilt it up off the counter, face toward +Z
+  tab.rotation.x = -0.95;
+  tab.position.set(0, 0.052, 0);
+  g.add(tab);
+  g.userData = { screenMat: screen.material };
+  return g;
+}
+
+// ====================================================================
+function buildEquipment(scene) {
+  const group = new THREE.Group();
+  scene.add(group);
+  const interactives = [];
+  const animated = [];
+  const reg = (object, info) => { interactives.push({ object, ...info }); return object; };
+
+  const D = 0.8;            // counter depth
+  const zBack = -2.7;       // back-row center Z
+  const W12 = 2.1;          // left + middle equal length
+
+  // ---- Table 1 (left) : 3 hot wells + sneeze guard ----
+  const t1 = buildCounter({ w: W12, d: D, logoSides: ['front'] });
+  t1.position.set(-2.1, 0, zBack);
+  group.add(t1);
+  reg(t1, { name: 'Fooda Counter — 3-Well Line', type: 'counter',
+    desc: 'Mobile butcher-block counter on locking casters carrying the three-pan hot-well line.' });
+  const topY = t1.userData.height;
+
+  // ---- Table 2 (middle) : 2 hot wells + sneeze guard ----
+  const t2 = buildCounter({ w: W12, d: D, logoSides: ['front'] });
+  t2.position.set(0, 0, zBack);
+  group.add(t2);
+  reg(t2, { name: 'Fooda Counter — 2-Well Line', type: 'counter',
+    desc: 'Second butcher-block counter holding the two-pan hot-well line and shared sneeze guard.' });
+
+  // ---- Table 3 (POS leg of the L) : iPad + card reader ----
+  // length = what the middle counter used to be (2.6). Runs back toward the
+  // wall so its far end sits beside the fridge.
+  const W3 = 2.6;
+  const t3 = buildCounter({ w: W3, d: D, logoSides: ['front'] });
+  t3.rotation.y = Math.PI / 2;          // length runs along Z; front faces +X
+  const legX = W12 / 2 + D / 2;         // 1.05 + 0.4 = 1.45 (left edge meets back row)
+  const legZ = -3.6;                     // extends back toward the wall (≈ z[-4.9, -2.3])
+  t3.position.set(legX, 0, legZ);
+  group.add(t3);
+  reg(t3, { name: 'Fooda POS Counter', type: 'counter',
+    desc: 'The checkout leg of the L, running back to the wall beside the fridge. Holds the landscape iPad point-of-sale and card reader.' });
+
+  // ---- Hot well stations ----
+  const wells3 = buildWellStation(3);
+  wells3.position.set(-2.1, topY + 0.005, zBack - 0.02);
+  group.add(wells3); animated.push(wells3);
+  reg(wells3, { name: 'Hot Food Wells', type: 'wells',
+    desc: 'Stainless steam-table pans keep the entrées hot — five hot wells in total run across the service line (three here, two on the next counter).' });
+
+  const wells2 = buildWellStation(2);
+  wells2.position.set(0, topY + 0.005, zBack - 0.02);
+  group.add(wells2); animated.push(wells2);
+  reg(wells2, { name: 'Hot Food Wells', type: 'wells',
+    desc: 'Stainless steam-table pans keep the entrées hot — five hot wells in total run across the service line (three on the first counter, two here).' });
+
+  // ---- Sneeze guards: black clips + flat plexiglass over each well line ----
+  const guard3 = buildSneezeGuard(1.5, D - 0.04);
+  guard3.position.set(-2.1, topY + 0.005, zBack - 0.02);
+  group.add(guard3);
+  reg(guard3, { name: 'Sneeze Guard', type: 'guard',
+    desc: 'Black table clips holding a flat plexiglass breath shield — two sneeze guards in total cover the service line.' });
+
+  const guard2 = buildSneezeGuard(1.0, D - 0.04);
+  guard2.position.set(0, topY + 0.005, zBack - 0.02);
+  group.add(guard2);
+  reg(guard2, { name: 'Sneeze Guard', type: 'guard',
+    desc: 'Black table clips holding a flat plexiglass breath shield — two sneeze guards in total cover the service line.' });
+
+  // ---- iPad (faces staff/inside) + card reader (faces customer/outside),
+  //      both near the middle of the POS leg ----
+  const ipad = buildIpad();
+  ipad.position.set(legX - 0.16, topY + 0.005, -3.55);
+  ipad.rotation.y = -Math.PI / 2;   // screen faces -X (the staff/inside of the L)
+  group.add(ipad);
+  reg(ipad, { name: 'iPad POS', type: 'pos',
+    desc: 'Landscape point-of-sale tablet, facing the staff inside the line. Click to open the register.' });
+
+  const reader = buildCardReader();
+  reader.position.set(legX + 0.17, topY + 0.005, -3.55);
+  reader.rotation.y = Math.PI / 2;  // faces +X (out toward the customer)
+  group.add(reader);
+  reg(reader, { name: 'Card Reader', type: 'reader',
+    desc: 'Customer-facing payment terminal — tap, chip or swipe. Click to run a payment.' });
+
+  // ---- Fridge + Warmer side by side, behind the back-row counters ----
+  const warmer = buildWarmer();
+  warmer.position.set(-1.7, 0, -5.7);
+  group.add(warmer); animated.push(warmer);
+  reg(warmer, { name: 'Standing Warmer', type: 'warmer',
+    desc: 'Clear-door heated holding cabinet behind the line. Click to toggle the warming light.' });
+
+  const fridge = buildFridge();
+  fridge.position.set(-0.45, 0, -5.75);
+  group.add(fridge);
+  reg(fridge, { name: 'Reach-in Fridge', type: 'fridge',
+    desc: 'Full-height stainless refrigerator for cold prep and beverages, behind the counters.' });
+
+  // ---- Wall TV menu board (right wall, where the fridge/warmer used to be) ----
+  const tv = buildTV();
+  tv.position.set(3.1, 2.4, -6.42);
+  group.add(tv);
+  reg(tv, { name: 'Menu Board (TV)', type: 'tv',
+    desc: "Wall-mounted digital menu. Click to open today's full menu." });
+
+  return {
+    group,
+    interactives,
+    footprint: { backMinX: -3.2, backMaxX: 1.05, legMinX: 1.05, legMaxX: 1.85, legFrontZ: legZ + W3 / 2, backFrontZ: zBack + D / 2 },
+    animate(t, dt) {
+      animated.forEach((obj) => {
+        const u = obj.userData;
+        if (u.steam) {
+          u.steam.forEach((s) => {
+            const target = u.serving ? 0.45 : 0;
+            const k = ((t * s.userData.speed + s.userData.phase) % 1);
+            s.position.y = s.userData.baseY + k * 0.42;
+            s.material.opacity += (target * (1 - k) - s.material.opacity) * Math.min(1, dt * 4);
+            s.scale.setScalar(0.12 + k * 0.2);
+          });
+        }
+        if (u.light !== undefined && u.targetIntensity !== undefined) {
+          u.light.intensity += (u.targetIntensity - u.light.intensity) * Math.min(1, dt * 6);
+        }
+      });
+    },
+  };
+}
+
+  return { buildEquipment };
+})();
+
+// ===== controls.js =====
+const { setupControls } = (() => {
+
+// Camera model: opens at an overview; selecting an item glides the camera
+// in and switches to ORBIT mode so the user can drag to inspect it fully.
+// No free roaming — only the overview and per-item orbit.
+function setupControls({ camera, dom, interactives, overview, onSelect }) {
+  const raycaster = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  let pressing = false, downX = 0, downY = 0, lastX = 0, lastY = 0, downT = 0, moved = 0;
+
+  const camTarget = camera.position.clone();
+  const lookTarget = new THREE.Vector3().copy(overview.look);
+  const lookCurrent = new THREE.Vector3().copy(overview.look);
+  camera.position.copy(overview.pos);
+  camTarget.copy(overview.pos);
+  camera.lookAt(overview.look);
+
+  const orbit = { active: false, center: new THREE.Vector3(), radius: 3, theta: 0, phi: 0 };
+
+  function computeOrbitTarget() {
+    const cp = Math.cos(orbit.phi);
+    camTarget.set(
+      orbit.center.x + orbit.radius * cp * Math.sin(orbit.theta),
+      orbit.center.y + orbit.radius * Math.sin(orbit.phi),
+      orbit.center.z + orbit.radius * cp * Math.cos(orbit.theta)
+    );
+    lookTarget.copy(orbit.center);
+  }
+
+  function focusItem(center, pos) {
+    orbit.active = true;
+    orbit.center.copy(center);
+    const off = new THREE.Vector3().subVectors(pos, center);
+    orbit.radius = Math.max(off.length(), 0.8);
+    orbit.theta = Math.atan2(off.x, off.z);
+    orbit.phi = Math.asin(THREE.MathUtils.clamp(off.y / orbit.radius, -1, 1));
+    computeOrbitTarget();
+  }
+  function setOverview() {
+    orbit.active = false;
+    camTarget.copy(overview.pos);
+    lookTarget.copy(overview.look);
+  }
+
+  function pick(e) {
+    const rect = dom.getBoundingClientRect();
+    ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(ndc, camera);
+    const hits = raycaster.intersectObjects(interactives.map((i) => i.object), true);
+    if (!hits.length) return null;
+    let node = hits[0].object, entry = null;
+    while (node && !entry) {
+      entry = interactives.find((i) => i.object === node);
+      node = node.parent;
+    }
+    return entry || null;
+  }
+
+  function down(e) {
+    pressing = true;
+    downX = lastX = e.clientX; downY = lastY = e.clientY;
+    downT = performance.now(); moved = 0;
+    dom.setPointerCapture?.(e.pointerId);
+  }
+  function move(e) {
+    if (!pressing) {
+      // hover cursor feedback
+      if (orbit.active) dom.style.cursor = 'grab';
+      else dom.style.cursor = pick(e) ? 'pointer' : 'default';
+      return;
+    }
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    moved += Math.abs(dx) + Math.abs(dy);
+    if (orbit.active) {
+      orbit.theta -= dx * 0.008;
+      orbit.phi = THREE.MathUtils.clamp(orbit.phi + dy * 0.008, -0.5, 1.25);
+      computeOrbitTarget();
+      dom.style.cursor = 'grabbing';
+    }
+  }
+  function up(e) {
+    if (!pressing) return;
+    pressing = false;
+    dom.releasePointerCapture?.(e.pointerId);
+    dom.style.cursor = orbit.active ? 'grab' : 'default';
+    const dt = performance.now() - downT;
+    if (moved < 8 && dt < 500) onSelect?.(pick(e));
+  }
+
+  dom.addEventListener('pointerdown', down);
+  dom.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+
+  function update(dt) {
+    const t = Math.min(1, dt * 3.0);
+    camera.position.lerp(camTarget, t);
+    lookCurrent.lerp(lookTarget, t);
+    camera.lookAt(lookCurrent);
+  }
+
+  return { update, focusItem, setOverview, overview };
+}
+
+  return { setupControls };
+})();
+
+
+// ===== main.js =====
+
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.84;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xd6d3cc);
+
+// Environment map so metals (stainless steel, etc.) reflect realistically.
+// A bright procedural sky/room gradient — gives stainless the luminous look
+// of the reference photos (reflecting bright windows) instead of dim grey.
+function makeEnvTexture() {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 512;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, c.height);
+  g.addColorStop(0.0, '#e6e9ed');   // ceiling / sky highlight
+  g.addColorStop(0.42, '#d6dbe0');
+  g.addColorStop(0.52, '#c4cad0');  // horizon
+  g.addColorStop(0.7, '#a7a39c');
+  g.addColorStop(1.0, '#6f6c66');    // floor
+  x.fillStyle = g; x.fillRect(0, 0, c.width, c.height);
+  // a couple of soft window bands so reflections read like glazing
+  x.fillStyle = 'rgba(238,242,246,0.55)';
+  x.fillRect(c.width * 0.05, c.height * 0.2, c.width * 0.28, c.height * 0.26);
+  x.fillRect(c.width * 0.62, c.height * 0.22, c.width * 0.22, c.height * 0.22);
+  const t = new THREE.CanvasTexture(c);
+  t.mapping = THREE.EquirectangularReflectionMapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromEquirectangular(makeEnvTexture()).texture;
+
+const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.05, 100);
+camera.position.set(-0.4, 2.4, 6.8);
+
+// overview viewpoint that frames the whole equipment set (closer in)
+const OVERVIEW = {
+  pos: new THREE.Vector3(-0.3, 1.95, 4.9),
+  look: new THREE.Vector3(-0.3, 1.0, -3.1),
+};
+
+// --- build world ---
+const { ROOM } = buildEnvironment(scene, renderer);
+const equip = buildEquipment(scene);
+
+// room bounds for the controller
+const room = { minX: -8, maxX: 8, minZ: -5.5, maxZ: 6.2 };
+
+// --- overlay UI ---
+const label = document.getElementById('label');
+const labelBody = document.getElementById('label-body');
+const labelHint = document.getElementById('label-hint');
+const toast = document.getElementById('toast');
+
+let selected = null;
+const baseEmissive = new WeakMap();
+
+function clearHighlight() {
+  if (!selected) return;
+  selected.object.traverse((o) => {
+    if (o.isMesh && baseEmissive.has(o)) {
+      const b = baseEmissive.get(o);
+      o.material.emissive && o.material.emissive.copy(b.color);
+      o.material.emissiveIntensity = b.intensity;
+      baseEmissive.delete(o);
+    }
+  });
+}
+function highlight(entry) {
+  entry.object.traverse((o) => {
+    if (o.isMesh && o.material && o.material.emissive && !o.material.emissiveMap) {
+      baseEmissive.set(o, { color: o.material.emissive.clone(), intensity: o.material.emissiveIntensity });
+      o.material.emissive.setHex(0x9fb4cf);
+      o.material.emissiveIntensity = 0.07;
+    }
+  });
+}
+
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => toast.classList.remove('show'), 1800);
+}
+
+function onSelect(entry) {
+  clearHighlight();
+  selected = entry;
+  if (!entry) {
+    label.classList.remove('show');
+    controls.setOverview();
+    setActivePanel(null);
+    return;
+  }
+  highlight(entry);
+  labelBody.innerHTML = equipmentHTML(entry.type, entry.name);
+  document.getElementById('eq-close')?.addEventListener('click', () => label.classList.remove('show'));
+  label.classList.add('show');
+  focusEntry(entry);
+  setActivePanel(entry);
+}
+
+function focusEntry(entry) {
+  const box = new THREE.Box3().setFromObject(entry.object);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const radius = Math.max(size.x, size.y, size.z);
+  const dir = new THREE.Vector3().subVectors(controls.overview.pos, center);
+  dir.y = 0;
+  if (dir.lengthSq() < 1e-4) dir.set(0, 0, 1);
+  dir.normalize();
+  const dist = Math.max(radius * 1.7, 1.7);
+  const pos = center.clone().add(dir.multiplyScalar(dist));
+  pos.y = center.y + radius * 0.3 + 0.5;
+  controls.focusItem(center, pos);
+}
+
+function toggleLight(entry, name) {
+  const u = entry.object.userData;
+  u.on = !u.on;
+  u.targetIntensity = u.on ? 1.8 : 0.0;
+  showToast(name + (u.on ? ' on' : ' off'));
+}
+
+function flashReader(group) {
+  const m = group.userData.screenMat;
+  if (!m) return;
+  const orig = m.emissive.getHex();
+  m.emissive.setHex(0x2ecc71);
+  m.emissiveIntensity = 1.2;
+  setTimeout(() => { m.emissive.setHex(orig); m.emissiveIntensity = 0.5; }, 900);
+}
+
+// --- equipment popup content ---
+const EQUIPMENT_INFO = {
+  warmer: {
+    tag: 'Warming Cabinet',
+    title: 'Standing Warmer',
+    desc: 'Fooda-provided. Stores and holds hot food before it goes to the serving line. Keep the door closed to maintain temperature.',
+    specs: ['Quantity: 1 on-site', 'Holds food at 135°F or above', 'Do not reheat or cook inside — holds only'],
+    model: 'Avantco HPI-1836 — full-size insulated heated holding/proofing cabinet',
+    link: { url: 'https://www.webstaurantstore.com/avantco-hpi-1836-full-size-insulated-heated-holding-proofing-cabinet-with-clear-door-120v/177HPI1836.html', label: 'View specs' },
+  },
+  fridge: {
+    tag: 'Refrigerator',
+    title: 'Reach-in Fridge',
+    desc: 'Fooda-provided commercial refrigerator. Stores backup cold items and keeps all cold food at safe temperature.',
+    specs: ['Quantity: 1 on-site', 'Keep cold food at or below 40°F', 'Temp danger zone: 40°–135°F'],
+    model: 'Avantco A-23R-HC — 29" solid-door reach-in refrigerator',
+    link: { url: 'https://www.webstaurantstore.com/avantco-a-23r-hc-29-solid-door-reach-in-refrigerator/178A23RHC.html', label: 'View specs' },
+  },
+  wells: {
+    tag: 'Electric Warmers',
+    title: 'Hot Food Wells',
+    desc: 'Countertop electric warmers with NSF pans. Keep already-hot food hot during service. They do not cook — food must arrive at 135°F or above.',
+    specs: ['Quantity: 5 total on-site', 'Keep food ≥ 135°F', 'Drain water before leaving', 'NSF containers required'],
+    model: 'Vollrath 71001 Cayenne — full-size countertop warmer, 120V / 700W',
+    link: { url: 'https://www.webstaurantstore.com/vollrath-71001-cayenne-full-size-countertop-warmer-with-stainless-steel-exterior-120v-700w/92271001.html', label: 'View specs' },
+  },
+  guard: {
+    tag: 'Sneeze Guard',
+    title: 'Sneeze Guard',
+    desc: 'Clear shield over the serving line protecting food from guests during service. Required by the health department — food for sale must be protected.',
+    specs: ['Quantity: 2 on-site', 'Wipe with food-safe sanitizer at close', 'Required for compliance'],
+  },
+  tv: {
+    tag: 'TV Menu Display',
+    title: 'Menu Board',
+    desc: 'Fooda-managed digital menu display. Shows today\'s menu to guests. Always bring a printed backup in case the TV has issues.',
+    specs: ['Quantity: 1 on-site', 'Menu updates handled by Fooda', 'Prices cannot exceed in-store retail'],
+  },
+  counter: {
+    tag: 'Serving Table',
+    title: 'Fooda Serving Counter',
+    desc: 'Fooda-branded mobile serving table on rolling casters. Two 6 ft tables and one 8 ft table are on-site.',
+    specs: ['Quantity: 3 total (two 6 ft, one 8 ft)', 'Rolling casters — mobile', 'Holds hot wells or POS equipment'],
+  },
+  pos: {
+    tag: 'Fooda POS',
+    title: 'iPad Point of Sale',
+    desc: 'The Fooda Restaurant Point of Sale app runs on iOS only. It handles sales, mobile orders, refunds, temp logs, discounts, and custom items.',
+    specs: ['iOS 14.0 or later', 'iPad or iPhone only (no Android)', 'Login: emailed by Fooda — reset via distro@fooda.com'],
+    required: '⚠️ Restaurants must purchase their own Apple device to participate in the Fooda program.',
+    link: { url: 'https://apps.apple.com/us/app/fooda-point-of-sale/id1204959993', label: 'Download Fooda POS' },
+  },
+  reader: {
+    tag: 'Card Reader',
+    title: 'BBPOS Run Card Reader',
+    desc: 'The required Bluetooth card reader for Fooda POS. Must be ON and CHARGED to pair. No-screen models use a 6-digit Bluetooth Passkey printed on the back.',
+    specs: ['Model: BBPOS Run', 'Bluetooth — charge before every event', 'Tap, insert, or swipe accepted', 'Pair via Settings → Card Reader Help'],
+    required: '⚠️ Restaurants must purchase the Fooda card reader to participate in the Fooda program.',
+    link: { url: 'https://fooda.runpayments.io/', label: 'Open RunPayments' },
+  },
+};
+
+function equipmentHTML(type, fallbackName) {
+  const info = EQUIPMENT_INFO[type];
+  if (!info) return `<div style="padding:24px"><b>${fallbackName}</b></div>`;
+  const specsHTML = info.specs.map(s => `<li>${s}</li>`).join('');
+  const linkHTML = info.link
+    ? `<a class="eq-link" href="${info.link.url}" target="_blank">${info.link.label}</a>`
+    : '';
+  const modelHTML = info.model ? `<p class="eq-model">${info.model}</p>` : '';
+  const requiredHTML = info.required ? `<div class="eq-required">${info.required}</div>` : '';
+  return `
+    <div class="eq-card">
+      <div class="eq-hero">
+        <button id="eq-close" class="eq-close">×</button>
+        <div class="eq-hero-tag">${info.tag}</div>
+        <div class="eq-hero-title">${info.title}</div>
+      </div>
+      <div class="eq-body">
+        <p class="eq-desc">${info.desc}</p>
+        ${requiredHTML}
+        <div class="eq-specs">
+          <div class="eq-specs-head">Details</div>
+          <ul>${specsHTML}</ul>
+          ${modelHTML}
+        </div>
+        ${linkHTML}
+      </div>
+    </div>`;
+}
+
+// --- controls ---
+const controls = setupControls({
+  camera, dom: canvas, interactives: equip.interactives, overview: OVERVIEW, onSelect,
+});
+
+// --- side panel: pick an item to inspect (one of each type) ---
+const panelList = document.getElementById('panel-list');
+const FEATURED = [
+  { type: 'counter', label: 'Fooda Counter', note: '3 total' },
+  { type: 'wells', label: 'Hot Food Wells', note: '5 total' },
+  { type: 'guard', label: 'Sneeze Guard', note: '2 total' },
+  { type: 'pos', label: 'iPad POS' },
+  { type: 'reader', label: 'Card Reader' },
+  { type: 'warmer', label: 'Standing Warmer' },
+  { type: 'fridge', label: 'Fridge' },
+  { type: 'tv', label: 'Menu Board' },
+];
+const panelByType = new Map();
+FEATURED.forEach((f) => {
+  const entry = equip.interactives.find((i) => i.type === f.type);
+  if (!entry) return;
+  const btn = document.createElement('button');
+  btn.className = 'panel-item';
+  btn.innerHTML = `<span>${f.label}</span>` + (f.note ? `<em>${f.note}</em>` : '');
+  btn.addEventListener('click', () => onSelect(entry));
+  panelList.appendChild(btn);
+  panelByType.set(f.type, btn);
+});
+function setActivePanel(entry) {
+  panelByType.forEach((btn) => btn.classList.remove('active'));
+  if (entry && panelByType.has(entry.type)) panelByType.get(entry.type).classList.add('active');
+}
+
+// --- resize ---
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// --- loop ---
+let last = performance.now();
+let rafScheduled = false;
+function frame() {
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  window.__frames = (window.__frames || 0) + 1;
+  controls.update(dt);
+  equip.animate(now / 1000, dt);
+  renderer.render(scene, camera);
+}
+function loop() {
+  frame();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+// Fallback driver so the scene still animates when rAF is throttled
+// (e.g. background tabs). rAF remains the primary clock when visible.
+setInterval(() => {
+  if (document.hidden) frame();
+}, 50);
+// render one frame synchronously so there is always an image
+frame();
+window.__frame = frame; window.__cam = camera; window.__controls = controls;
+
+// hide loading overlay
+const loadingEl = document.getElementById('loading');
+setTimeout(() => loadingEl && loadingEl.classList.add('hide'), 400);
+
+// overview button — return to the wide view
+document.getElementById('reset-view')?.addEventListener('click', () => {
+  onSelect(null);
+});
+
+</script>
+</body>
+</html>
