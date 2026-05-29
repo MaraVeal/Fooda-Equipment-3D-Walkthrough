@@ -940,7 +940,7 @@ function woodTop(w, d, thick = 0.07) {
   const tex = woodTexture();
   tex.repeat.set(Math.max(1, w / 1.2), 1);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.4, metalness: 0.04 });
+  const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.4, metalness: 0.04, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
   const edge = new THREE.MeshStandardMaterial({ color: 0xd2ab6c, roughness: 0.45 });
   const top = new THREE.Mesh(new THREE.BoxGeometry(w, thick, d), [edge, edge, mat, mat, edge, edge]);
   top.castShadow = true; top.receiveShadow = true;
@@ -969,13 +969,17 @@ function addDoorDetail(g, side, w, d, h, handles) {
   const nDoors = Math.max(2, Math.round(along / 1.25));
   const frameMat = M.cabinet();
   const panelMat = M.cabinetDark();
+  frameMat.polygonOffset = true; frameMat.polygonOffsetFactor = -2; frameMat.polygonOffsetUnits = -2;
+  panelMat.polygonOffset = true; panelMat.polygonOffsetFactor = -1; panelMat.polygonOffsetUnits = -1;
   const chrome = new THREE.MeshStandardMaterial({ color: 0xd6d9dd, roughness: 0.22, metalness: 0.95, envMapIntensity: 1.2 });
 
+  // Push face group just clear of the cabinet surface to avoid z-fighting
+  const faceOffset = 0.003;
   const face = new THREE.Group();
-  if (side === 'front') { face.position.z = d / 2; }
-  if (side === 'back') { face.position.z = -d / 2; face.rotation.y = Math.PI; }
-  if (side === 'right') { face.position.x = w / 2; face.rotation.y = Math.PI / 2; }
-  if (side === 'left') { face.position.x = -w / 2; face.rotation.y = -Math.PI / 2; }
+  if (side === 'front') { face.position.z = d / 2 + faceOffset; }
+  if (side === 'back') { face.position.z = -d / 2 - faceOffset; face.rotation.y = Math.PI; }
+  if (side === 'right') { face.position.x = w / 2 + faceOffset; face.rotation.y = Math.PI / 2; }
+  if (side === 'left') { face.position.x = -w / 2 - faceOffset; face.rotation.y = -Math.PI / 2; }
 
   const gap = 0.02;
   const slot = (along - 0.04) / nDoors;
@@ -1017,7 +1021,7 @@ function addDoorDetail(g, side, w, d, h, handles) {
 // logoSides: array of 'front' | 'back' | 'left' | 'right'
 function buildCounter({ w, d, h = 0.9, logoSides = ['front'] }) {
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), M.cabinet());
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w - 0.002, h, d - 0.002), M.cabinet());
   body.position.y = h / 2 + 0.16;
   body.castShadow = true; body.receiveShadow = true;
   g.add(body);
@@ -1030,14 +1034,14 @@ function buildCounter({ w, d, h = 0.9, logoSides = ['front'] }) {
   const bracketMat = M.steelDark();
   [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
     const br = new THREE.Mesh(new THREE.BoxGeometry(0.04, h - 0.05, 0.04), bracketMat);
-    br.position.set(sx * (w / 2 - 0.02), h / 2 + 0.16, sz * (d / 2 - 0.02));
+    br.position.set(sx * (w / 2), h / 2 + 0.16, sz * (d / 2));
     g.add(br);
   });
 
   // storage doors only on the staff/INSIDE face (the outside stays clean)
   addDoorDetail(g, 'back', w, d, h, true);
 
-  const top = woodTop(w + 0.06, d + 0.06);
+  const top = woodTop(w - 0.001, d - 0.001);
   top.position.y = h + 0.16 + 0.035;
   g.add(top);
 
@@ -1641,7 +1645,7 @@ function setupControls({ camera, dom, interactives, overview, onSelect }) {
 // ===== main.js =====
 
 const canvas = document.getElementById('scene');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true, logarithmicDepthBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
